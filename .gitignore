@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Env vars / secrets (API keys, DB passwords) — never commit these
+.env
+
+# Downloaded paper files — large and re-fetchable, don't need to be in git
+data/papers/*
+
+# Editor/OS junk
+.DS_Store
+.vscode/
