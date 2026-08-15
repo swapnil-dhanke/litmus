@@ -48,6 +48,8 @@ cleaned = clean_text(text)
 sentences = split_into_sentences(cleaned)
 chunks = group_into_chunks(sentences, max_words=250, separator=" ")
 
+
+
 if __name__ == "__main__":
     print(len(chunks))
     print(chunks[0]) 

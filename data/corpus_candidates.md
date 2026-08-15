@@ -12,11 +12,11 @@ the literature agree/disagree, and why?
 ## Positive / "it does work" camp
 - Madaan et al., *Self-Refine: Iterative Refinement with Self-Feedback* — arXiv:2303.17651
 - Shinn et al., *Reflexion: Language Agents with Verbal Reinforcement Learning* — arXiv:2303.11366
-- Wu et al., *Large Language Models Can Self-Correct with Key Condition Verification* — EMNLP 2024
-- Kumar et al., *Training Language Models to Self-Correct via Reinforcement Learning* — ICLR 2024
+- Wu et al., *Large Language Models Can Self-Correct with Key Condition Verification* — EMNLP 2024 — arXiv:2405.14092
+- Kumar et al., *Training Language Models to Self-Correct via Reinforcement Learning* (SCoRe) — ICLR 2025 — arXiv:2409.12917
 
 ## Nuanced / "it depends" camp
-- Zhang et al., *Small Language Models Need Strong Verifiers to Self-Correct Reasoning* — ACL 2024
+- Zhang et al., *Small Language Models Need Strong Verifiers to Self-Correct Reasoning* — ACL 2024 — arXiv:2404.17140
 - Pan et al., *Automatically Correcting Large Language Models: Surveying self-correction strategies* — arXiv:2308.03188
 - *Confidence Matters: Revisiting Intrinsic Self-Correction Capabilities of LLMs* — arXiv:2402.12563
 - *Confidence v.s. Critique: A Decomposition of Self-Correction Capability for LLMs* — arXiv:2412.19513
