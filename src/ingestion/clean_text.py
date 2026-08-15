@@ -1,5 +1,6 @@
 import re
 
+
 # A real messy snippet from the Huang et al. paper's fetched HTML text.
 sample = (
     "have showcased promising results across a multitude of applications "
@@ -24,7 +25,12 @@ def clean_text(text: str) -> str:
     #    \([^)]+\)     matches the (url "title") part and throws it away
     text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
 
+    # 3 remove half cut words that are being cut due to end of space in line
+
+    text = re.sub(r"-\n(?=[a-z])", "", text)
+
     return text
+
 
 
 if __name__ == "__main__":
