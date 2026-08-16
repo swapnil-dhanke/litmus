@@ -7,6 +7,7 @@ with open("data/processed/huang_cannot_self_correct.json") as f:
 chunk = data["chunks"][5]
 
 prompt = f"""Extract factual claims about LLM self-correction from this text.
+Do not include section headings, titles, author names, or citation markers as claims — only include substantive factual assertions.
 For each claim, include the exact sentence from the text it's based on.
 
 Respond with JSON in this exact shape:
@@ -14,6 +15,7 @@ Respond with JSON in this exact shape:
 
 Text:
 {chunk}"""
+
 
 url = "http://localhost:11434/api/chat"
 payload = {
