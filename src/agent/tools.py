@@ -1,0 +1,78 @@
+import requests
+import numpy as np
+from neo4j import GraphDatabase
+
+driver = GraphDatabase.driver("bolt://127.0.0.1:7687", auth=("neo4j", "Swapnil@123"))
+
+
+def embed_text(text):
+    url = "http://localhost:11434/api/embed"
+    payload = {"model": "mxbai-embed-large", "input": text}
+    response = requests.post(url, json=payload)
+    return response.json()["embeddings"][0]
+
+
+def search_claims(query, top_k=5):
+    """Search for claims relevant to a topic. Returns a list of (similarity, claim text, paper name)."""
+    query_vector = np.array(embed_text(query))
+
+    with driver.session() as session:
+        result = session.run("""
+            MATCH (c:Claim)-[:EXTRACTED_FROM]->(p:Paper)
+            RETURN c.text AS text, c.embedding AS embedding, p.name AS paper_name
+        """)
+        claims = [dict(record) for record in result]
+
+    scored = []
+    for claim in claims:
+        similarity = np.dot(query_vector, np.array(claim["embedding"]))
+        scored.append((similarity, claim["text"], claim["paper_name"]))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return scored[:top_k]
+
+def find_relationships(claim_text):
+    """Given a description of a claim, find what other claims agree with or contradict it."""
+    query_vector = np.array(embed_text(claim_text))
+
+    with driver.session() as session:
+        result = session.run("""
+            MATCH (c:Claim)-[:EXTRACTED_FROM]->(p:Paper)
+            RETURN elementId(c) AS id, c.text AS text, c.embedding AS embedding, p.name AS paper_name
+        """)
+        claims = [dict(record) for record in result]
+
+    best_match = max(claims, key=lambda c: np.dot(query_vector, np.array(c["embedding"])))
+
+    with driver.session() as session:
+        agrees = session.run("""
+            MATCH (c:Claim)-[:AGREES_WITH]-(other:Claim)-[:EXTRACTED_FROM]->(p:Paper)
+            WHERE elementId(c) = $claim_id
+            RETURN other.text AS text, p.name AS paper_name
+        """, claim_id=best_match["id"])
+        agreements = [dict(r) for r in agrees]
+
+        contradicts = session.run("""
+            MATCH (c:Claim)-[:CONTRADICTS]-(other:Claim)-[:EXTRACTED_FROM]->(p:Paper)
+            WHERE elementId(c) = $claim_id
+            RETURN other.text AS text, p.name AS paper_name
+        """, claim_id=best_match["id"])
+        contradictions = [dict(r) for r in contradicts]
+
+    return {
+        "matched_claim": best_match["text"],
+        "matched_paper": best_match["paper_name"],
+        "agreements": agreements,
+        "contradictions": contradictions,
+    }
+
+# if __name__ == "__main__":
+#     results = search_claims("does self-correction help without external feedback")
+#     for score, text, paper in results:
+#         print(f"{paper} ({score:.3f}): {text[:100]}")
+
+if __name__ == "__main__":
+    result = find_relationships("self-correction improves performance")
+    print(result["matched_claim"], "—", result["matched_paper"])
+    print("AGREES:", result["agreements"])
+    print("CONTRADICTS:", result["contradictions"])
