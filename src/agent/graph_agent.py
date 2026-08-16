@@ -63,20 +63,13 @@ or
 
     thought_line = f"Thought: {decision.get('thought', '')}\n"
     if decision.get("action") == "finish":
-        thought_line += f"Final Answer: {decision.get('input', '')}\n"
-
-    # return {
-    #     "action": decision.get("action", "finish"),
-    #     "action_input": decision.get("input", ""),
-    #     "history": state["history"] + thought_line,
-    #     "steps": state["steps"],
-    # }
+            thought_line += f"Final Answer: {decision.get('input', '')}\n"
 
     return {
-        "action": decision.get("action", "finish"),
-        "action_input": decision.get("input", ""),
-        "history": state["history"] + f"Thought: {decision.get('thought', '')}\n",
-        "steps": state["steps"] + 1,
+            "action": decision.get("action", "finish"),
+            "action_input": decision.get("input", ""),
+            "history": state["history"] + thought_line,
+            "steps": state["steps"] + 1,
     }
 
 
