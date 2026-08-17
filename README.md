@@ -39,6 +39,29 @@ Corpus: 18 arXiv papers on LLM self-correction (see `data/corpus_candidates.md`)
   hand-labeled ground truth + precision/recall evaluation is the right tool to
   measure and address them systematically rather than manual spot-checking.
 
+## Evaluation (Phase 6) — status: needs improvement
+
+Built a blind, hand-labeled ground truth set to formally measure the contradiction/agreement
+judge (Phase 3), rather than continuing to hand-tune from small ad-hoc spot-checks. Methodology:
+sampled 25 pairs currently saved as `AGREES_WITH` and 25 as `CONTRADICTS`, shuffled them together,
+and hand-labeled all 50 blind (the pipeline's actual answer was hidden in a separate file until
+scoring, to avoid anchoring).
+
+**Measured precision** (of pairs the pipeline flagged, how many were correct per hand-label):
+- `agrees`: 13/25 correct — **52%**
+- `contradicts`: 5/25 correct — **20%**
+
+Note: this measures precision only, not full recall — Phase 3 never persisted "judged unrelated"
+outcomes, so there's no record of candidate pairs the judge silently passed over that might have
+actually been real agreements/contradictions it missed.
+
+**Key finding:** of the 25 pairs flagged `contradicts`, 17 (68%) were judged `agrees` by hand —
+a systematic bias, not noise. Despite three rounds of ad-hoc prompt tuning in Phase 3 (reducing
+raw contradiction counts 93 → 49 → 38), the judge still confuses real agreement for contradiction
+far more often than the reverse. This is a stronger, more precise signal than the earlier raw
+counts, since it comes from a blind stratified sample rather than unstratified eyeballing.
+Currently being addressed with one targeted, data-driven prompt fix, to be re-measured.
+
 ## Guardrails (Phase 5)
 
 Every claim's `source_sentence` is checked against the real text of its paper (fuzzy match via

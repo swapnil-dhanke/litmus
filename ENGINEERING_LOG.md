@@ -516,6 +516,50 @@ of real data rather than described abstractly.
 
 ---
 
+## Phase 6 — Evaluation Suite
+
+### 43. Circularity risk: an LLM can't grade its own homework
+**Context:** Needed real ground truth to measure the Phase 3 contradiction/agreement judge
+against, rather than continuing ad-hoc spot-checks.
+**Decision:** Used a human-labeled sample as ground truth instead of a second (possibly larger or
+"smarter") LLM judging the first — using another LLM to grade the judge would only prove the two
+models agree with each other, not that either is actually correct.
+**Fix:** Built a small blind-labeling workflow: sample 25 `AGREES_WITH` + 25 `CONTRADICTS` pairs
+from Neo4j, shuffle them, hide the pipeline's actual answer in a separate file until scoring, and
+hand-label all 50 pairs personally.
+**Why it matters:** A genuinely important distinction in eval design — "ground truth" needs to
+come from a source independent of the system being measured, or the measurement is circular
+regardless of how sophisticated the judge doing the grading is.
+
+### 44. Spreadsheet app silently saved edits to a different file
+**Context:** Labeled all 50 pairs in Numbers, but the scoring script found every `human_label`
+cell empty when reading `data/eval_labeling_sheet.csv`.
+**Root cause:** Numbers' default save (Cmd+S) on an opened `.csv` file doesn't overwrite the CSV
+in place — it created a new file, `eval_labeling_sheet.csv.numbers` (treating the entire original
+name, `.csv` included, as the base filename and appending its own native extension), leaving the
+original CSV untouched and still empty.
+**Fix:** File → Export To → CSV in Numbers, explicitly overwriting the original path.
+**Why it matters:** A reminder that GUI apps' "Save" can silently mean "save a copy in a different
+format" rather than "overwrite this exact file" — worth verifying the actual file on disk (`head
+-5 file.csv`) rather than trusting that an edit in an app necessarily landed where a script expects
+it to.
+
+### 45. Measured judge precision was much lower than raw counts suggested
+**Context:** Phase 3's ad-hoc spot-checks (unstratified, small samples) had reduced raw
+contradiction counts from 93 to 38 across three prompt-tuning rounds, which read as meaningful
+progress.
+**What the blind hand-labeled sample actually found:** precision on `agrees` was 52% (13/25
+correct), and precision on `contradicts` was only 20% (5/25 correct) — with 17 of those 25
+`contradicts` predictions (68%) being real agreements per hand-label, a systematic bias rather
+than random noise.
+**Why it matters:** A clear demonstration of why "the raw count went down" and "the precision is
+actually good" are different claims — the earlier ad-hoc tuning had genuinely reduced *volume* of
+flagged contradictions without necessarily fixing the underlying *rate* at which flagged
+contradictions were wrong. Only a properly stratified, blind-labeled sample surfaced the real
+number.
+
+---
+
 ## Cross-cutting themes (good for a "what did you learn" interview answer)
 
 - **LLM output needs defense in depth**: valid syntax ≠ right keys ≠ right types ≠ right
