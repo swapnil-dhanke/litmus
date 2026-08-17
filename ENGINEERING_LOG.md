@@ -322,6 +322,198 @@ exact-string-match guard.
 interesting problem. The forced-finish fallback is also a broadly important production pattern:
 an agent should never just give up with nothing.
 
+### 30. Rebuilding the hand-built agent in LangGraph — first run "did nothing"
+**Context:** After writing `AgentState` (a `TypedDict`) and a helper function in the new
+LangGraph version, running the file produced no output and no error.
+**Explanation (not a bug):** The file only contained type/function *definitions* at that point —
+no node wiring, no graph compile, no entry point that actually invoked anything. Python reaching
+the end of a file with nothing left to execute is expected, not a failure.
+**Why it matters:** Worth being able to distinguish "silent because nothing runs yet" from
+"silently failing" before spending time debugging — cheap to check, easy to misdiagnose under
+time pressure.
+
+### 31. LangGraph node silently returned `None`
+**Context:** `tool_node` was left incomplete mid-edit (missing its `if/elif` tool dispatch and
+`return` statement) but was still syntactically valid Python, so it imported and ran without
+error.
+**Root cause:** A function with no explicit `return` implicitly returns `None`. LangGraph expects
+every node to return a dict of state updates; `None` broke the graph's state-merging step instead
+of raising an obvious error at the source.
+**Fix:** Completed the function body with its intended dispatch/repetition-guard logic and an
+explicit `return {...}`.
+**Why it matters:** A reminder that "the file parses and runs" is a much weaker guarantee than
+"the file does what I meant" — especially for functions expected to always return a specific
+shape (a common source of quiet framework-level failures).
+
+### 32. `KeyError: 'steps'` on the very first graph run
+**Context:** Added a `steps` field to `AgentState` (for a step-count safety net) and referenced
+`state["steps"]` inside a node, but the very first invocation crashed.
+**Root cause:** Declaring a field in a `TypedDict` only documents the *shape* state is expected
+to have — it doesn't populate a default value. The actual `initial_state` dict passed to
+`app.invoke(...)` still lacked a `"steps"` key.
+**Fix:** Added `"steps": 0` to `initial_state`.
+**Why it matters:** `TypedDict` is a type hint, not a runtime guarantee or an auto-initializer —
+every field referenced inside a node must actually be present in whatever gets passed to
+`invoke()`.
+
+### 33. `GraphRecursionError` — the graph looped without ever finishing
+**Context:** The LangGraph agent ran for 20 steps and was killed by LangGraph's built-in
+`recursion_limit` safety net without producing an answer.
+**Root cause:** Same underlying issue as the hand-built agent's original repetition problem
+(a small local model not reliably choosing to stop) — but `recursion_limit` is a blunt cutoff
+enforced *outside* the graph. By the time it fires, LangGraph has already abandoned the run, so
+there's no way to gracefully produce a forced answer from inside a caught exception.
+**Fix:** Replicated the hand-built agent's forced-finish fallback as an explicit third path
+*inside* the graph itself: a `steps` counter incremented every agent turn, a routing function
+that redirects to a dedicated `force_finish` node once the counter passes a threshold, and that
+node making one last tool-free LLM call to produce a best-effort answer from whatever context
+was already gathered.
+**Why it matters:** A generic framework safety net (a recursion/step limit) and a
+domain-appropriate graceful-degradation path are two different things — the former stops
+disaster, the latter produces a usable result. Both are needed; neither substitutes for the
+other.
+
+### 34. Graph wiring mismatches caught at `compile()`/first-run time
+**Context:** Adding the `force_finish` path took three attempts before it worked: first, the
+conditional edge's routing dict didn't include a `"force_finish"` key at all (`ValueError:
+unknown target`); then the key was added but pointed at a node that was never registered with
+`graph.add_node(...)` (a second `ValueError`); then the node was registered but its own outgoing
+edge to `END` was still missing.
+**Fix:** Each error message named the exact missing piece; added them one at a time until the
+graph's `validate()` step (run automatically inside `compile()`) passed cleanly.
+**Why it matters:** LangGraph wiring has three parts that all have to agree with each other — a
+registered node, a routing function's return value, and a mapping entry for that return value.
+`compile()`'s validation catching this *before* runtime (rather than failing deep inside a graph
+execution) is a good illustration of why frameworks like this validate structure eagerly.
+
+### 35. Files became structurally tangled after many incremental patches
+**Context:** After several rounds of "change this one function" edits to both `graph_agent.py`
+and (later, in Phase 5) `verify_claims.py`, both files accumulated real structural damage: a
+whole block of code left indented as though still inside the *previous* function (making it
+part of that function's body instead of its own top-level logic), a function defined twice with
+only the second definition actually taking effect, and print statements referencing variables
+that were now out of scope — none of which raised an error immediately, since the code was still
+syntactically valid Python.
+**Fix:** Rather than continuing to patch piece by piece, rewrote each file's full contents from
+scratch once the tangle was identified, restructuring loose top-level code into properly named
+functions (e.g. `run_verification()`) and gating actual execution behind
+`if __name__ == "__main__":`.
+**Why it matters:** Small, isolated patches are usually the right call, but there's a point where
+the cost of re-deriving full context from a diff exceeds the cost of just re-supplying the whole
+file — recognizing that crossover point (rather than patching indefinitely) is itself a practical
+skill.
+
+### 36. `git push` reported "up to date" despite an unsaved fix
+**Context:** After fixing a bug in the editor, `git status` reported "nothing to commit" and
+`git push` said "up to date" — even though the fix was clearly visible on screen.
+**Root cause:** The file's editor tab had unsaved changes (the fix existed only in the editor's
+in-memory buffer). Git only ever sees what's actually written to disk, so as far as git was
+concerned, nothing had changed.
+**Fix:** Saved the file, re-checked `git status` (now showed the file as modified), then
+committed and pushed.
+**Why it matters:** A good reminder to verify "is this actually saved to disk" as a first check
+whenever a fix visibly exists but git refuses to acknowledge it — cheap to check, easy to
+overlook.
+
+### 37. Computed value assigned but never actually used
+**Context:** After fixing entry 31's bug, a follow-up fix built a `thought_line` variable meant
+to include the agent's final answer text — but the function's actual `return` statement still
+referenced the old, separately-reconstructed line instead of the new variable, so the fix had no
+effect despite compiling and running without error.
+**Verification:** Caught not by re-reading the local file (which "looked" fixed) but by fetching
+the pushed version directly from GitHub's raw content and comparing it line by line.
+**Why it matters:** A variable can be computed correctly and still never affect the program's
+behavior if nothing downstream actually reads it — "the fix is in the file" and "the fix is in
+the code path that runs" are different claims, and only the second one matters. Also reinforces
+verifying pushed state independently rather than trusting a local visual check.
+
+---
+
+## Phase 5 — Guardrails
+
+### 38. Design decision: fuzzy matching, flag-don't-delete
+**Context:** Phase 2's claim extraction asked the model to include a `source_sentence` alongside
+every claim, but nothing ever verified the model actually quoted the paper rather than inventing
+a plausible-sounding sentence (a classic RAG/agent failure mode: hallucinated citation).
+**Decisions made explicitly, before writing code:**
+  - Fuzzy matching (allowing minor whitespace/punctuation drift) instead of strict exact-substring
+    matching, since the pipeline's own upstream cleanup (hyphenation fixes, whitespace collapsing)
+    could otherwise cause false flags on genuinely correct quotes.
+  - Flagging unverified claims (`c.verified = false`, `c.match_score = ...`) rather than deleting
+    them, so the false/flag rate becomes a measurable metric for Phase 6 instead of silently
+    discarded data.
+**Why it matters:** Making the strictness/severity tradeoffs explicit up front, rather than
+picking defaults implicitly, made the later debugging (entry 41) much easier to reason about —
+the threshold and matching method were known, deliberate choices, not accidents.
+
+### 39. Reusing sentence-splitting logic across packages was more trouble than it was worth
+**Context:** `src/ingestion/chunker.py` already had a `split_into_sentences` function that was
+exactly what the new guardrail script needed.
+**Root cause:** `chunker.py` has module-level code (a demo `extract_text(...)` call) that runs on
+*any* import, not just when the file is run directly, and its own sibling imports
+(`from clean_text import clean_text`) only resolve correctly when something inside
+`src/ingestion/` is the directly-executed script — neither of which holds when importing it from
+a file living in `src/graph/`.
+**Fix:** Duplicated the 3-line function locally in the new file instead of importing it
+cross-package.
+**Why it matters:** Sometimes the pragmatic choice is small, deliberate duplication rather than
+fighting an existing module's structural assumptions — worth being able to justify that tradeoff
+explicitly rather than treating "never duplicate code" as an absolute rule. (Also surfaced
+`chunker.py`'s module-level side effect as real tech debt, logged but not fixed, since it wasn't
+blocking current work.)
+
+### 40. High initial flag rate (31.4%) prompted investigation instead of acceptance
+**Context:** First full run of the verification guardrail: 1,114 verified / 511 flagged out of
+1,625 claims.
+**Decision:** Rather than accepting or reporting that number at face value, spot-checked several
+flagged claims side-by-side with their claimed source and closest real sentence — the same
+instinct applied earlier in Phase 3 to the contradiction false-positive investigation.
+**Why it matters:** A guardrail's own output can itself contain measurement bugs; treating a
+guardrail's flags as automatically "ground truth" without spot-checking would have produced a
+misleading number in the README/CV material.
+
+### 41. Root cause of most flags: length-sensitive similarity scoring, not hallucination
+**Context:** Spot-checking showed most flagged claims were genuine, word-for-word exact quotes —
+just partial ones (missing a trailing citation list, or starting mid-sentence relative to the
+real text).
+**Root cause:** `difflib.SequenceMatcher.ratio()` computes similarity based on total string
+length on both sides, so a short, 100%-accurate partial quote against a much longer real sentence
+scores low (0.60–0.73) purely from the length mismatch — not from any actual content
+disagreement.
+**Fix:** Checked plain substring containment first (`normalized_source in normalized_sentence or
+normalized_sentence in normalized_source`) and short-circuited to a perfect score (`1.0`) on a
+match, only falling back to the fuzzy ratio when containment failed.
+**Result:** Flagged claims dropped from 511 (31.4%) to 54 (3.3%) — verified count rose from 1,114
+to 1,571.
+**Why it matters:** A strong example of a metric-design bug masquerading as a data-quality
+problem — the fix wasn't to the underlying data or the extraction pipeline at all, just to how
+similarity was being measured.
+
+### 42. Remaining flagged claims revealed real, distinct extraction failure modes
+**Context:** With the scoring bug fixed, the remaining ~3% of flagged claims were spot-checked
+again to confirm they were genuine issues rather than more scoring noise.
+**Findings — four distinct categories, each confirmed with a concrete example:**
+  - **Title/heading extracted as a claim** — a paper's own all-caps title, which never appears as
+    a real sentence in flowing prose (titles have no sentence-ending punctuation), so it can never
+    score well against real text no matter how good the matching method is.
+  - **Claim/source misattribution** — the claim text and its "quoted" source sentence were about
+    unrelated things (a claim about a refiner's decoding behavior, attached to a nearby math
+    formula about weighted-voting aggregation) — the extraction step grabbed the wrong nearby
+    sentence as "evidence."
+  - **Prompt-instruction leakage** — on a garbled/formula-heavy chunk, the extraction model echoed
+    a line from its own *extraction instructions* ("Do not include section headings...") back as
+    if it were a claim and source quoted from the paper itself.
+  - **Benchmark/case-study example mistaken for a real claim** — confirmed by reading the actual
+    source chunk directly: the "confidence_matters" paper includes a worked trivia example
+    ("Which restaurant chain's headquarters is further north, Pizza Inn or Papa Gino's?") used to
+    illustrate its self-correction method across multiple prompting rounds; the extraction step
+    read a sentence from that illustrative example as if it were a real claim about
+    self-correction research.
+**Why it matters:** Confirms the guardrail is functioning as intended — catching real, distinct
+pipeline quality issues rather than just noise — and gives four concrete, well-evidenced examples
+for discussing extraction/RAG failure modes in an interview, each traced back to an actual chunk
+of real data rather than described abstractly.
+
 ---
 
 ## Cross-cutting themes (good for a "what did you learn" interview answer)
@@ -336,3 +528,11 @@ an agent should never just give up with nothing.
 - **Know when to stop manual tuning and start measuring** — several rounds of "spot-check,
   find an issue, patch the prompt" hit diminishing returns; the right move was formalizing
   evaluation (Phase 6) rather than continuing to guess from small samples.
+- **A guardrail's own numbers need the same scrutiny as the thing it's guarding** — the first
+  guardrail run's 31.4% flag rate turned out to be mostly a scoring-method artifact, not a real
+  data-quality problem; spot-checking the guardrail itself (not just trusting its output) is what
+  surfaced that.
+- **"It compiles/runs without error" is a weak guarantee** — several real bugs (a node silently
+  returning `None`, a computed variable never actually used, a file edited but never saved)
+  produced no error at all; only checking actual behavior against actual expectations (running
+  it, or diffing the actually-pushed remote file) caught them.

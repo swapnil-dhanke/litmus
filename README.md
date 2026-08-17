@@ -16,8 +16,8 @@ Corpus: 18 arXiv papers on LLM self-correction (see `data/corpus_candidates.md`)
 - [x] Phase 1 — Ingestion & embeddings
 - [x] Phase 2 — Structured claim extraction (Neo4j)
 - [x] Phase 3 — Contradiction detection
-- [ ] Phase 4 — Agentic layer (ReAct from scratch, then LangGraph)
-- [ ] Phase 5 — Guardrails (every claim traces to a quoted source sentence)
+- [x] Phase 4 — Agentic layer (ReAct from scratch, then LangGraph)
+- [x] Phase 5 — Guardrails (every claim traces to a quoted source sentence)
 - [ ] Phase 6 — Evaluation suite (hand-labeled ground truth, precision/recall, RAGAS-style)
 - [ ] Phase 7 — Token/cost optimization
 - [ ] Phase 8 — Polish & GitHub
@@ -38,6 +38,24 @@ Corpus: 18 arXiv papers on LLM self-correction (see `data/corpus_candidates.md`)
 - Both issues are logged here rather than further hand-tuned, since Phase 6's
   hand-labeled ground truth + precision/recall evaluation is the right tool to
   measure and address them systematically rather than manual spot-checking.
+
+## Guardrails (Phase 5)
+
+Every claim's `source_sentence` is checked against the real text of its paper (fuzzy match via
+`difflib.SequenceMatcher`, with exact substring containment treated as a perfect match) and
+tagged `verified`/`match_score` in the graph rather than filtered out, so the flag rate is a
+measurable signal instead of silently discarded data. Current result: **1,571 / 1,625 verified
+(96.7%)**, 54 flagged (3.3%). The agent's tools (`search_claims`, `find_relationships`) surface
+this tag inline on every claim they return.
+
+Spot-checking the flagged claims surfaced four distinct extraction failure modes from Phase 2,
+each confirmed against real data:
+- Paper titles/headings extracted as claims (never appear as real sentences in prose)
+- Claim/source misattribution (claim text and its "quoted" source are about unrelated things)
+- Prompt-instruction leakage (extraction model echoed its own instructions back as fake content
+  on a garbled/formula-heavy chunk)
+- Benchmark/case-study examples inside a paper mistaken for the paper's own claims (e.g. a worked
+  trivia example the `confidence_matters` paper uses to illustrate its method)
 
 ## Setup
 

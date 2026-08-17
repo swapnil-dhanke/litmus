@@ -14,36 +14,51 @@ class AgentState(TypedDict):
     steps: int
 
 
+# def format_observation(action, result):
+#     if action == "search_claims":
+#         return "\n".join(f"- ({score:.3f}) [{paper}] {text}" for score, text, paper in result)
+#     elif action == "find_relationships":
+#         lines = [f"Matched claim: {result['matched_claim']} ({result['matched_paper']})", "Agrees with:"]
+#         lines += [f"  - [{a['paper_name']}] {a['text']}" for a in result["agreements"]]
+#         lines.append("Contradicts:")
+#         lines += [f"  - [{c['paper_name']}] {c['text']}" for c in result["contradictions"]]
+#         return "\n".join(lines)
+
 def format_observation(action, result):
     if action == "search_claims":
-        return "\n".join(f"- ({score:.3f}) [{paper}] {text}" for score, text, paper in result)
+        lines = []
+        for score, text, paper, verified, match_score in result:
+            tag = "verified" if verified else f"UNVERIFIED match={match_score:.2f}"
+            lines.append(f"- ({score:.3f}) [{paper}] [{tag}] {text}")
+        return "\n".join(lines)
     elif action == "find_relationships":
-        lines = [f"Matched claim: {result['matched_claim']} ({result['matched_paper']})", "Agrees with:"]
-        lines += [f"  - [{a['paper_name']}] {a['text']}" for a in result["agreements"]]
+        matched_tag = "verified" if result["matched_verified"] else "UNVERIFIED"
+        lines = [f"Matched claim: {result['matched_claim']} ({result['matched_paper']}) [{matched_tag}]", "Agrees with:"]
+        lines += [f"  - [{a['paper_name']}] [{'verified' if a['verified'] else 'UNVERIFIED'}] {a['text']}" for a in result["agreements"]]
         lines.append("Contradicts:")
-        lines += [f"  - [{c['paper_name']}] {c['text']}" for c in result["contradictions"]]
+        lines += [f"  - [{c['paper_name']}] [{'verified' if c['verified'] else 'UNVERIFIED'}] {c['text']}" for c in result["contradictions"]]
         return "\n".join(lines)
 
 
 def agent_node(state: AgentState) -> dict:
     prompt = f"""You are a research assistant answering questions about LLM self-correction research.
 
-You have two tools:
-- search_claims: search for claims relevant to a topic. Input: a search query.
-- find_relationships: given a claim description, find what agrees with or contradicts it. Input: a claim description.
+    You have two tools:
+    - search_claims: search for claims relevant to a topic. Input: a search query.
+    - find_relationships: given a claim description, find what agrees with or contradicts it. Input: a claim description.
 
-Question: {state['question']}
+    Question: {state['question']}
 
-{state['history']}
+    {state['history']}
 
-If you already have enough information from the observations above, use action "finish" now.
+    If you already have enough information from the observations above, use action "finish" now.
 
-Decide your next step. Respond with JSON in this exact shape:
-{{"thought": "your reasoning", "action": "search_claims", "input": "your search query"}}
-or
-{{"thought": "your reasoning", "action": "find_relationships", "input": "claim description"}}
-or
-{{"thought": "your reasoning", "action": "finish", "input": "your final answer to the question"}}"""
+    Decide your next step. Respond with JSON in this exact shape:
+    {{"thought": "your reasoning", "action": "search_claims", "input": "your search query"}}
+    or
+    {{"thought": "your reasoning", "action": "find_relationships", "input": "claim description"}}
+    or
+    {{"thought": "your reasoning", "action": "finish", "input": "your final answer to the question"}}"""
 
     url = "http://localhost:11434/api/chat"
     payload = {

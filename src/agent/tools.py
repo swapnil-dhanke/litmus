@@ -17,16 +17,22 @@ def search_claims(query, top_k=5):
     query_vector = np.array(embed_text(query))
 
     with driver.session() as session:
+        # result = session.run("""
+        #     MATCH (c:Claim)-[:EXTRACTED_FROM]->(p:Paper)
+        #     RETURN c.text AS text, c.embedding AS embedding, p.name AS paper_name
+        # """)
         result = session.run("""
             MATCH (c:Claim)-[:EXTRACTED_FROM]->(p:Paper)
-            RETURN c.text AS text, c.embedding AS embedding, p.name AS paper_name
+            RETURN c.text AS text, c.embedding AS embedding, p.name AS paper_name,
+                   c.verified AS verified, c.match_score AS match_score
         """)
         claims = [dict(record) for record in result]
 
     scored = []
     for claim in claims:
         similarity = np.dot(query_vector, np.array(claim["embedding"]))
-        scored.append((similarity, claim["text"], claim["paper_name"]))
+
+        scored.append((similarity, claim["text"], claim["paper_name"], claim["verified"], claim["match_score"]))
 
     scored.sort(key=lambda x: x[0], reverse=True)
     return scored[:top_k]
@@ -36,10 +42,12 @@ def find_relationships(claim_text):
     query_vector = np.array(embed_text(claim_text))
 
     with driver.session() as session:
-        result = session.run("""
+        result = session.run(
+            """
             MATCH (c:Claim)-[:EXTRACTED_FROM]->(p:Paper)
-            RETURN elementId(c) AS id, c.text AS text, c.embedding AS embedding, p.name AS paper_name
-        """)
+            RETURN elementId(c) AS id, c.text AS text, c.embedding AS embedding, p.name AS paper_name,
+            c.verified AS verified, c.match_score AS match_score
+            """)
         claims = [dict(record) for record in result]
 
     best_match = max(claims, key=lambda c: np.dot(query_vector, np.array(c["embedding"])))
@@ -48,20 +56,22 @@ def find_relationships(claim_text):
         agrees = session.run("""
             MATCH (c:Claim)-[:AGREES_WITH]-(other:Claim)-[:EXTRACTED_FROM]->(p:Paper)
             WHERE elementId(c) = $claim_id
-            RETURN other.text AS text, p.name AS paper_name
+            RETURN other.text AS text, p.name AS paper_name, other.verified AS verified, other.match_score AS match_score
         """, claim_id=best_match["id"])
         agreements = [dict(r) for r in agrees]
 
         contradicts = session.run("""
             MATCH (c:Claim)-[:CONTRADICTS]-(other:Claim)-[:EXTRACTED_FROM]->(p:Paper)
             WHERE elementId(c) = $claim_id
-            RETURN other.text AS text, p.name AS paper_name
+            RETURN other.text AS text, p.name AS paper_name, other.verified AS verified, other.match_score AS match_score
         """, claim_id=best_match["id"])
         contradictions = [dict(r) for r in contradicts]
+        
 
     return {
         "matched_claim": best_match["text"],
         "matched_paper": best_match["paper_name"],
+        "matched_verified": best_match["verified"],
         "agreements": agreements,
         "contradictions": contradictions,
     }
