@@ -1,0 +1,51 @@
+pair_id,paper_a,text_a,paper_b,text_b,human_label
+0,illusion_of_insight,Large language models have intrinsic self-correction ability,confidence_matters,Critic: Large language models can self-correct with tool-interactive critiquing.,Contradicts
+1,confidence_vs_critique,Small language model can self-correct,kumar_score,Small language models need strong verifiers to self-correct reasoning.,Agrees
+2,confidence_vs_critique,Large language models need strong verifiers to self-correct reasoning.,kamoi_critical_survey,Small language models need strong verifiers to selfcorrect reasoning,Agrees
+3,refining_over_resampling,Large language models have intrinsic self-correction ability.,kamoi_critical_survey,Small language model can self-correct.,Agrees
+4,huang_cannot_self_correct,LLMs struggle to self-correct their reasoning in this setting.,confidence_vs_critique,LLMs struggle with refining self-generated responses.,Agrees
+5,confidence_vs_critique,Large language models have intrinsic self-correction ability.,self_reflective_generation,Small language models can be improved with self-taught self-correction.,Agrees
+6,confidence_matters,Critic: Large language models can self-correct with tool-interactive critiquing.,illusion_of_insight,Large language models have intrinsic self-correction ability,Contradicts
+7,illusion_of_insight,Large language models have intrinsic self-correction ability,confidence_matters,Automatically correcting large language models: Surveying the landscape of diverse self-correction strategies.,Unrelated
+8,confidence_matters,Critic: Large language models can self-correct with tool-interactive critiquing.,wu_key_condition_verification,Large language models can self-correct with tool-interactive critiquing.,Agrees
+9,pan_surveying_self_correction,LLMs can self-correct,kamoi_critical_survey,LLMs can self-correct their mistakes,Agrees
+10,pan_surveying_self_correction,"Self-Correction technique, where an LLM is employed to generate feedback and refine its own output.",shinn_reflexion,LLMs can self-correct by refining their internal representations through human feedback.,Unrelated
+11,kamoi_critical_survey,Confidence matters: Revisiting intrinsic self-correction capabilities of large language models,beyond_output_critique,CRITIC: Large language models can self-correct with tool-interactive critiquing.,Contradicts
+12,pan_surveying_self_correction,CRITIC: large language models can self-correct with tool-interactive critiquing.,confidence_vs_critique,Small language model can self-correct,Agrees
+13,kamoi_critical_survey,Small language models need strong verifiers to selfcorrect reasoning,confidence_vs_critique,Small language model can self-correct,Agrees
+14,confidence_vs_critique,Self-correction can improve performance.,huang_cannot_self_correct,"Simply integrating the feedback into the initial instruction can yield better results, and self-correction again decreases performance.",Contradicts
+15,kamoi_critical_survey,Small language model can self-correct.,refining_over_resampling,Large language models have intrinsic self-correction ability.,Agrees
+16,self_correcting_generation_vs_mc,Large language models have intrinsic self-correction ability.,zhang_strong_verifiers,Small language model can self-correct.,Agrees
+17,kamoi_critical_survey,Large language models can self-correct with minimal effort.,self_correcting_generation_vs_mc,Large language models have intrinsic self-correction ability.,Agrees
+18,confidence_matters,Automatically correcting large language models: Surveying the landscape of diverse self-correction strategies.,self_correction_illusion,CRITIC: Large Language Models Can Self-Correct with Tool-Interactive Critiquing.,Unrelated
+19,confidence_vs_critique,Large language models have intrinsic self-correction ability.,kamoi_critical_survey,Small language model can self-correct.,Agrees
+20,illusion_of_insight,Small language models need strong verifiers to self-correct reasoning.,zhang_strong_verifiers,Small language model can self-correct.,Agrees
+21,self_correcting_generation_vs_mc,Training language models to self-correct via reinforcement learning.,self_correction_illusion,CRITIC: Large Language Models Can Self-Correct with Tool-Interactive Critiquing.,Unrelated
+22,pan_surveying_self_correction,Generating sequences by learning to selfcorrect.,kamoi_critical_survey,Generating sequences by learning to self-correct.,Agrees
+23,pan_surveying_self_correction,LLMs can self-correct,beyond_output_critique,LLM self-correction refers to the ability of large language models (LLMs) to correct their own errors or inaccuracies in their generated text.,Unrelated
+24,confidence_matters,Critic: Large language models can self-correct with tool-interactive critiquing.,illusion_of_insight,Self-correction bench: Uncovering and addressing the self-correction blind spot in large language models,Unrelated
+25,huang_cannot_self_correct,LLM self-correction involves refining prompts and generating new text based on the given concepts.,wu_key_condition_verification,Self-Correct instructs an LLM to critique and refine its initial response.,Agrees
+26,confidence_vs_critique,"LLMs cannot find reasoning errors, but can correct them given the error location.",zhang_strong_verifiers,"LLMs can successfully solve a problem, but cannot verify the reasoning",Agrees
+27,zhang_strong_verifiers,Small language model can self-correct.,illusion_of_insight,Small language models need strong verifiers to self-correct reasoning.,Agrees
+28,confidence_matters,Automatically correcting large language models: Surveying the landscape of diverse self-correction strategies.,confidence_vs_critique,Large language models trained on code can self-correction,Unrelated
+29,refining_over_resampling,LLMs can generate sequences by learning to self-correct,madaan_self_refine,Generating sequences by learning to self-correct,Agrees
+30,wu_key_condition_verification,Large language models can self-correct with tool-interactive critiquing.,huang_cannot_self_correct,Automatically correcting large language models: Surveying the landscape of diverse selfcorrection strategies,Unrelated
+31,pan_surveying_self_correction,CRITIC: large language models can self-correct with tool-interactive critiquing.,zhang_strong_verifiers,Automatically correcting large language models: Surveying the landscape of diverse self-correction strategies.,Unrelated
+32,huang_cannot_self_correct,Self-correction changes a correct answer to an incorrect one.,wu_key_condition_verification,Self-Correct can be used to correct incorrect answers,Agrees
+33,illusion_of_insight,Large language models have intrinsic self-correction ability,kamoi_critical_survey,Small language model can self-correct.,Agrees
+34,huang_cannot_self_correct,Automatically correcting large language models: Surveying the landscape of diverse selfcorrection strategies,confidence_matters,Critic: Large language models can self-correct with tool-interactive critiquing.,Unrelated
+35,kamoi_critical_survey,"LLMs cannot find reasoning errors, but can correct them given the error location.",zhang_strong_verifiers,"LLMs can successfully solve a problem, but cannot verify the reasoning",Agrees
+36,illusion_of_insight,Large language models can self-correct with key condition verification.,zhang_strong_verifiers,Small language model can self-correct.,Agrees
+37,illusion_of_insight,Small language models need strong verifiers to self-correct reasoning.,kamoi_critical_survey,Small language model can self-correct.,Agrees
+38,lost_at_beginning_of_reasoning,LLM self-correction,zhang_strong_verifiers,LLM self-correction,Unrelated
+39,zhang_strong_verifiers,LLM self-correction is a technique used to improve the performance of language models.,huang_cannot_self_correct,LLMs can be trained to self-debug and improve their performance through self-correction mechanisms.,Unrelated
+40,confidence_vs_critique,Small language model can self-correct,kamoi_critical_survey,Small language models need strong verifiers to selfcorrect reasoning,Agrees
+41,confidence_vs_critique,Small language model can self-correct,kamoi_critical_survey,Large language models can self-correct with tool-interactive critiquing.,Agrees
+42,kumar_score,Small language models need strong verifiers to self-correct reasoning.,kamoi_critical_survey,Large language models are better reasoners with self-verification.,Contradicts
+43,confidence_vs_critique,Small language model can self-correct,beyond_output_critique,Large language models have intrinsic self-correction ability.,Agrees
+44,wu_key_condition_verification,Large language models can self-correct with tool-interactive critiquing.,refining_over_resampling,Large language models have intrinsic self-correction ability.,Agrees
+45,beyond_output_critique,LLM self-correction refers to the process by which a language model identifies and corrects its own errors.,lost_at_beginning_of_reasoning,LLM self-correction,Unrelated
+46,kamoi_critical_survey,Small language model can self-correct.,illusion_of_insight,Small language models need strong verifiers to self-correct reasoning.,Agrees
+47,self_correction_illusion,Large Language Models Cannot Self-Correct Reasoning Yet.,refining_over_resampling,Large language models cannot self-correct reasoning yet.,Agrees
+48,zhang_strong_verifiers,LLM self-correction is a technique used to improve the performance of language models.,beyond_output_critique,"LLMs have shown promising self-correction abilities, where iterative refinement improves the quality of generated responses.",Unrelated
+49,kamoi_critical_survey,Large language models can self-correct with tool-interactive critiquing.,self_correcting_generation_vs_mc,Large language models have intrinsic self-correction ability.,Contradicts
