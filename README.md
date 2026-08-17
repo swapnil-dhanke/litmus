@@ -18,7 +18,7 @@ Corpus: 18 arXiv papers on LLM self-correction (see `data/corpus_candidates.md`)
 - [x] Phase 3 — Contradiction detection
 - [x] Phase 4 — Agentic layer (ReAct from scratch, then LangGraph)
 - [x] Phase 5 — Guardrails (every claim traces to a quoted source sentence)
-- [ ] Phase 6 — Evaluation suite (hand-labeled ground truth, precision/recall, RAGAS-style)
+- [x] Phase 6 — Evaluation suite (hand-labeled ground truth, precision/recall, RAGAS-style)
 - [ ] Phase 7 — Token/cost optimization
 - [ ] Phase 8 — Polish & GitHub
 
@@ -39,7 +39,7 @@ Corpus: 18 arXiv papers on LLM self-correction (see `data/corpus_candidates.md`)
   hand-labeled ground truth + precision/recall evaluation is the right tool to
   measure and address them systematically rather than manual spot-checking.
 
-## Evaluation (Phase 6) — status: needs improvement
+## Evaluation (Phase 6)
 
 Built a blind, hand-labeled ground truth set to formally measure the contradiction/agreement
 judge (Phase 3), rather than continuing to hand-tune from small ad-hoc spot-checks. Methodology:
@@ -58,9 +58,28 @@ actually been real agreements/contradictions it missed.
 **Key finding:** of the 25 pairs flagged `contradicts`, 17 (68%) were judged `agrees` by hand —
 a systematic bias, not noise. Despite three rounds of ad-hoc prompt tuning in Phase 3 (reducing
 raw contradiction counts 93 → 49 → 38), the judge still confuses real agreement for contradiction
-far more often than the reverse. This is a stronger, more precise signal than the earlier raw
-counts, since it comes from a blind stratified sample rather than unstratified eyeballing.
-Currently being addressed with one targeted, data-driven prompt fix, to be re-measured.
+far more often than the reverse.
+
+**Follow-up: one targeted, data-driven prompt fix was attempted and rejected.** Added a second
+few-shot example plus a stricter "only choose contradicts if genuinely opposing" instruction,
+aimed directly at the diagnosed bias. Re-checked (read-only, no writes to the graph) against the
+5 pairs independently confirmed as genuinely contradicting: **0/5 still verified as `contradicts`**
+— the fix overcorrected, trading false positives for false negatives. A softer version (dropping
+the second example, keeping only the stricter instruction) improved this to 1/5, and 15/39 on the
+full re-check — still not a clear win, and several of the reclassified pairs turned out to involve
+claims that are actually paper titles or duplicate citations (the same Phase 5 extraction-quality
+issues), meaning a real share of the remaining confusion traces back to noisy input to the judge
+rather than the judgment prompt itself.
+
+**Decision: stopped tuning the judge prompt further.** Same conclusion as Phase 3's original
+"stop ad-hoc tuning" decision, now with harder evidence behind it — measurably, tightening
+precision on a 3B local model's classification prompt degrades recall on the same class, and a
+meaningful share of remaining errors are attributable to upstream claim-extraction quality (Phase
+2), not the judge. The graph itself was left unmodified (both prompt attempts were tested
+read-only against saved data, never applied to a live re-run), so the original Phase 3 numbers
+(482 agrees, 38 contradicts) still stand. Fixing this properly would mean improving Phase 2
+extraction quality first — logged as future work rather than continuing to chase judge-prompt
+tuning with diminishing returns.
 
 ## Guardrails (Phase 5)
 

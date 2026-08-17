@@ -560,6 +560,73 @@ number.
 
 ---
 
+### 46. Unguarded module-level code caused real data corruption, not just confusion
+**Context:** While improving the judge prompt, a fix wrapping `judge_claims.py`'s pipeline in a
+`run_judgment()` function behind `if __name__ == "__main__":` was described but never actually
+applied — the pipeline code was still sitting unguarded at the top level. Two small diagnostic
+scripts (`recheck_contradicts.py`, `recheck_confirmed.py`) then imported `judge_pair` from that
+file to test the new prompt on a handful of pairs — but each import silently re-executed the
+*entire* 803-pair judgment pipeline as a side effect, on top of a direct run of the file itself.
+**Impact:** 511 claim pairs ended up with duplicate `AGREES_WITH` relationships, since
+`save_relationship` used `CREATE` (always adds a new relationship) rather than `MERGE` (add only
+if it doesn't already exist).
+**Detection:** A Cypher query grouping relationships by `(a, b)` pair and counting how many pairs
+had more than one relationship between them (`MATCH (a)-[r:AGREES_WITH]->(b) WITH a, b, count(r)
+AS rel_count WHERE rel_count > 1 ...`) — same "aggregate and look for outliers" instinct as
+Phase 2's claims-per-chunk ratio check.
+**Fix (two parts):**
+  - Actually applied the `run_judgment()`/`__main__` guard this time (verified by re-reading the
+    file's actual content before proceeding, not just trusting the described intent).
+  - Cleaned up existing duplicates with `MATCH (a)-[r:AGREES_WITH]->(b) WITH a, b, collect(r) AS
+    rels WHERE size(rels) > 1 FOREACH (r IN tail(rels) | DELETE r)` — keeps one relationship per
+    pair, deletes the rest.
+**Why it matters:** This is the same "unguarded module-level code" bug class seen earlier
+(`chunker.py`, entry 30's `graph_agent.py`) recurring a third time — except this time the
+consequence wasn't just wasted compute or a confusing debugging session, it was actual duplicate
+data silently written to the graph. A strong argument for why this class of bug deserves a
+permanent structural fix (entry 47) rather than just remembering to guard each new file
+individually.
+
+### 47. `CREATE` → `MERGE` as a permanent guard against accidental re-runs
+**Context:** After cleaning up entry 46's duplicates, `save_relationship` still used `CREATE`,
+meaning any *future* accidental re-run (however it happened) would recreate the same problem.
+**Fix:** Changed `CREATE (a)-[:{rel_type}]->(b)` to `MERGE (a)-[:{rel_type}]->(b)` — `MERGE`
+only creates the relationship if an identical one doesn't already exist, making it safe to
+accidentally run the pipeline twice.
+**Why it matters:** Fixing the immediate cause (the unguarded import) addresses *how* this
+specific incident happened; making the write operation itself idempotent addresses *any* way a
+duplicate run could happen, including ones not yet imagined. Defense in depth applied to a
+database write, not just to LLM output parsing (the theme from Phase 2).
+
+---
+
+### 48. Data-driven prompt fix overcorrected — precision gain traded for recall loss
+**Context:** Using the specific bias diagnosed in entry 45 (real agreements mislabeled as
+contradicts 68% of the time), added a second few-shot example plus a stricter "only choose
+contradicts if genuinely opposing" instruction to `judge_pair`, then re-checked (read-only,
+against saved data, no writes to the graph) rather than re-running the full pipeline blind.
+**Result, first version (with the new example):** of the 5 pairs independently confirmed as
+genuinely contradicting, **0/5** still came back `contradicts` — complete recall collapse on
+that class. Of the original 38 (now 39) `CONTRADICTS` pairs, 0 stayed `contradicts` at all.
+**Result, second version (instruction only, second example dropped):** improved to 1/5 on the
+confirmed-real set, 15/39 on the full re-check — better, but still not a clean win, and several
+reclassified pairs involved claims that are themselves paper titles or duplicate citations
+(Phase 5's known extraction-quality issues), meaning some of the remaining confusion isn't
+attributable to the judgment prompt at all.
+**Decision:** Stopped tuning the prompt further and left the graph unmodified — same call Phase 3
+made in entry 26, but now backed by harder evidence: tightening a 3B local model's precision on
+one class measurably costs recall on the same class, and a real share of errors trace back to
+upstream claim quality (Phase 2), not the judge itself. Logged as a limitation; fixing it properly
+would mean improving extraction quality first, not further judge-prompt iteration.
+**Why it matters:** A genuinely important, generalizable lesson about small local models: a
+prompt fix that looks correct in isolation (addressing exactly the diagnosed failure mode) can
+still fail in practice by overcorrecting, and the only way to know is to check the fix against
+cases it needs to get right, not just cases it needs to stop getting wrong. Confirming a fix
+requires checking *both* directions of the confusion matrix, not just the one that motivated
+the fix.
+
+---
+
 ## Cross-cutting themes (good for a "what did you learn" interview answer)
 
 - **LLM output needs defense in depth**: valid syntax ≠ right keys ≠ right types ≠ right
