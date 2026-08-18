@@ -12,17 +12,9 @@ class AgentState(TypedDict):
     action: str
     action_input: str
     steps: int
+    prompt_tokens: int
+    completion_tokens: int
 
-
-# def format_observation(action, result):
-#     if action == "search_claims":
-#         return "\n".join(f"- ({score:.3f}) [{paper}] {text}" for score, text, paper in result)
-#     elif action == "find_relationships":
-#         lines = [f"Matched claim: {result['matched_claim']} ({result['matched_paper']})", "Agrees with:"]
-#         lines += [f"  - [{a['paper_name']}] {a['text']}" for a in result["agreements"]]
-#         lines.append("Contradicts:")
-#         lines += [f"  - [{c['paper_name']}] {c['text']}" for c in result["contradictions"]]
-#         return "\n".join(lines)
 
 def format_observation(action, result):
     if action == "search_claims":
@@ -40,6 +32,13 @@ def format_observation(action, result):
         return "\n".join(lines)
 
 
+def windowed_history(history, max_lines=12):
+    lines = history.strip().split("\n")
+    if len(lines) <= max_lines:
+        return history
+    return "...(earlier steps omitted)...\n" + "\n".join(lines[-max_lines:])
+
+
 def agent_node(state: AgentState) -> dict:
     prompt = f"""You are a research assistant answering questions about LLM self-correction research.
 
@@ -49,7 +48,7 @@ def agent_node(state: AgentState) -> dict:
 
     Question: {state['question']}
 
-    {state['history']}
+    {windowed_history(state['history'])}
 
     If you already have enough information from the observations above, use action "finish" now.
 
@@ -69,7 +68,8 @@ def agent_node(state: AgentState) -> dict:
         "options": {"num_predict": 300},
     }
     response = requests.post(url, json=payload, timeout=60)
-    content = response.json()["message"]["content"]
+    result = response.json()
+    content = result["message"]["content"]
 
     try:
         decision = json.loads(content)
@@ -78,13 +78,15 @@ def agent_node(state: AgentState) -> dict:
 
     thought_line = f"Thought: {decision.get('thought', '')}\n"
     if decision.get("action") == "finish":
-            thought_line += f"Final Answer: {decision.get('input', '')}\n"
+        thought_line += f"Final Answer: {decision.get('input', '')}\n"
 
     return {
-            "action": decision.get("action", "finish"),
-            "action_input": decision.get("input", ""),
-            "history": state["history"] + thought_line,
-            "steps": state["steps"] + 1,
+        "action": decision.get("action", "finish"),
+        "action_input": decision.get("input", ""),
+        "history": state["history"] + thought_line,
+        "steps": state["steps"] + 1,
+        "prompt_tokens": state["prompt_tokens"] + result.get("prompt_eval_count", 0),
+        "completion_tokens": state["completion_tokens"] + result.get("eval_count", 0),
     }
 
 
@@ -125,12 +127,12 @@ def route_after_agent(state: AgentState) -> str:
 def force_finish_node(state: AgentState) -> dict:
     prompt = f"""Based on everything below, give your best final answer to the question. Do not use any tools.
 
-Question: {state['question']}
+    Question: {state['question']}
 
-{state['history']}
+    {state['history']}
 
-Respond with JSON in this exact shape:
-{{"answer": "your final answer"}}"""
+    Respond with JSON in this exact shape:
+    {{"answer": "your final answer"}}"""
 
     url = "http://localhost:11434/api/chat"
     payload = {
@@ -141,14 +143,19 @@ Respond with JSON in this exact shape:
         "options": {"num_predict": 300},
     }
     response = requests.post(url, json=payload, timeout=60)
-    content = response.json()["message"]["content"]
+    result = response.json()
+    content = result["message"]["content"]
 
     try:
         answer = json.loads(content).get("answer", "Unable to produce a final answer.")
     except json.JSONDecodeError:
         answer = "Unable to produce a final answer."
 
-    return {"history": state["history"] + f"Forced final answer: {answer}\n"}
+    return {
+        "history": state["history"] + f"Forced final answer: {answer}\n",
+        "prompt_tokens": state["prompt_tokens"] + result.get("prompt_eval_count", 0),
+        "completion_tokens": state["completion_tokens"] + result.get("eval_count", 0),
+    }
 
 
 graph = StateGraph(AgentState)
@@ -170,6 +177,7 @@ app = graph.compile()
 
 
 if __name__ == "__main__":
+
     initial_state = {
         "question": "Does self-correction via prompting improve LLM reasoning without external feedback?",
         "history": "",
@@ -177,6 +185,11 @@ if __name__ == "__main__":
         "action": "",
         "action_input": "",
         "steps": 0,
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
     }
     final_state = app.invoke(initial_state, {"recursion_limit": 25})
     print(final_state["history"])
+    print(f"\nTotal prompt tokens: {final_state['prompt_tokens']}")
+    print(f"Total completion tokens: {final_state['completion_tokens']}")
+    print(f"Total tokens: {final_state['prompt_tokens'] + final_state['completion_tokens']}")
