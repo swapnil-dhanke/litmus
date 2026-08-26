@@ -627,6 +627,126 @@ the fix.
 
 ---
 
+## Phase 7 — Token/Cost Optimization
+
+### 49. Ollama's response already contains real token counts — no estimation needed
+**Context:** Needed an actual baseline of how expensive one agent run is, to have something
+concrete to optimize against.
+**Approach:** Ollama's `/api/chat` response includes `prompt_eval_count` and `eval_count` as
+top-level fields alongside `"message"` — the real token counts the model itself used, not an
+estimate from counting words or characters.
+**Result:** One query = 2,137 prompt tokens + 463 completion tokens = 2,600 total, with prompt
+tokens dominating — consistent with the hypothesis that the agent's growing, fully-resent history
+is the main cost driver, not the (already capped via `num_predict`) generation side.
+
+### 50. Comparing total tokens across two runs of a non-deterministic system is invalid
+**Context:** After implementing `windowed_history()` (capping how much history gets included in
+each `agent_node` prompt to the last 12 lines) and re-running the same question, total tokens
+went *up* (4,744 vs. the 2,600 baseline) — apparently a regression.
+**Root cause (suspected, not yet confirmed):** Total tokens for a full run depends on how many
+steps the agent took before finishing, and step count isn't deterministic — the same question can
+lead the model to make a different number of tool calls on different runs. A single run's total
+is therefore not a controlled comparison; an increase could mean the fix didn't help, or it could
+simply mean this particular run happened to take more steps for unrelated reasons.
+**Status:** Not yet resolved — the correct fix is either averaging several runs, or comparing
+tokens *per step* rather than per whole run, to isolate the windowing effect from natural
+run-length variance. Logged honestly as an open item rather than either claiming an unconfirmed
+win or reverting the fix without evidence it's actually wrong.
+**Why it matters:** A direct parallel to Phase 6's evaluation lesson (entry 45) — a single
+aggregate number, on its own, can be actively misleading about whether a fix worked, especially
+when the system being measured has inherent run-to-run variance. The fix for measurement here is
+the same kind of fix as there: control for the confounding variable (run length) rather than
+trusting a raw before/after total.
+
+### 51. Unbounded tool output found while investigating entry 50's confound
+**Context:** While digging into why the windowed-history re-run showed higher total tokens,
+inspection of that run's transcript revealed the real culprit for at least part of it: a single
+`find_relationships` call returned 11 agreement matches in one observation. `search_claims` had
+always capped itself at `top_k=5`, but `find_relationships` had no equivalent cap — an
+inconsistency that had gone unnoticed since Phase 4.
+**Fix:** Added `top_k=5` to `find_relationships`, slicing both the agreements and contradictions
+lists before returning.
+**Verification:** Confirmed directly and cleanly — the identical tool call that previously
+returned 11 items now returns exactly 5, a before/after comparison that doesn't depend on overall
+run length the way entry 50's aggregate token totals did.
+**Why it matters:** A better-scoped fix than entry 49/50's history windowing, since it caps cost
+at the source (an unbounded database query result) rather than only downstream (what gets
+re-sent in a later prompt) — and it was found by actually reading a "confusing" measurement
+result closely instead of dismissing it, which is what led to noticing the real inconsistency
+underneath it.
+
+---
+
+## Phase 2 Revisited — Extraction Quality Improvements
+
+### 52. Went back to Phase 2 extraction quality, per entry 48's own recommendation
+**Context:** Entry 48 concluded that further judge-prompt tuning had hit diminishing returns and
+that a real share of remaining errors trace back to upstream claim-extraction quality (Phase 2),
+not the judge itself. Rather than continuing to iterate downstream, went back to the actual root
+cause: the four extraction failure modes confirmed by the Phase 5 spot-check (title/heading
+extracted as a claim, claim/source misattribution, prompt-instruction leakage on garbled chunks,
+benchmark/worked-example text mistaken for a real claim).
+**Fix (two independent layers, deliberately not relying on the prompt alone):**
+  - Extraction prompt (`process_each_claim.py`) rewritten with explicit negative examples for two
+    of the four failure modes specifically — a citation-reference example ("As CRITIC showed...")
+    and a worked benchmark-question example (the real `confidence_matters` trivia case) — plus an
+    explicit instruction never to echo the prompt's own instructions back as extracted content.
+  - A new, non-LLM `passes_heuristic_filter()` runs on every candidate claim before it's saved:
+    rejects any claim whose `source_sentence` has no sentence-ending punctuation (titles/headings
+    reliably lack this, catching both ALL-CAPS *and* normal title-case cases — the latter is
+    exactly what slipped past the old `.isupper()`-only filter in entry 26), rejects all-uppercase
+    source sentences directly at extraction time instead of only at judge time, rejects
+    suspiciously short source sentences, and rejects anything overlapping with known fragments of
+    our own extraction instructions.
+  - Added `test_extraction_v2.py` — a read-only script (no graph writes) that runs the OLD and NEW
+    extraction side by side against two real, confirmed-bad chunks (the `huang_cannot_self_correct`
+    title/author chunk, and the `confidence_matters` Pizza-Inn-vs-Papa-Gino's trivia chunk) to
+    verify the fix actually catches these specific, previously-confirmed failures before
+    committing to any full re-extraction of the corpus.
+**Not fully addressed by this pass:** claim/source misattribution (the claim and its "quoted"
+source being about unrelated topics) is the one failure mode of the four that a punctuation/length/
+uppercase heuristic can't catch mechanically — the new prompt's instruction to only quote a
+sentence that "directly and specifically supports" the claim is a prompt-level mitigation only,
+not a guaranteed fix, and would need its own targeted, measured check (e.g., an embedding-
+similarity sanity check between claim and source_sentence) to verify rather than assume.
+**Why it matters:** A concrete example of following your own evaluation's conclusion to its actual
+root cause instead of continuing to patch a downstream symptom — and of preferring a mechanical,
+non-LLM filter over prompt wording alone wherever a failure mode has a reliable, checkable
+structural signature (missing punctuation, all-caps, length), since a filter like that can't be
+"talked out of" catching a bad case the way a prompt instruction sometimes can.
+
+### 53. Real-data test run surfaced two new findings before any full re-extraction
+**Context:** Ran `test_extraction_v2.py` against the two known-bad chunks to validate entry 52's
+fix before committing to a full corpus re-extraction.
+**Finding 1 (confirms the original bug):** on the `confidence_matters` benchmark chunk, the OLD
+prompt reproduced the documented failure exactly — it extracted an unrelated worked-example
+sentence ("Pizza 73 is headquartered in Edmonton, Alberta, Canada.") and packaged it as a claim.
+**Finding 2 (a new, unanticipated cost of the fix):** on the same chunk, the NEW prompt didn't
+repeat that specific mistake, but not because it understood the "ignore benchmark examples"
+instruction — it returned a degenerate, near-empty claim (`{"claim": "self-correction", ...}`)
+that the heuristic filter caught only because its source sentence was too short/unpunctuated, not
+because the filter recognized it as a benchmark example specifically. The longer, denser prompt
+(two new few-shot examples plus extra instructions) plausibly overloaded llama3.2's ability to
+follow the core extraction task on this chunk — a real, small-model reliability cost of making an
+already-long prompt longer, not just noise.
+**Also surfaced:** the OLD prompt has no shape guardrail at all — `extract_claims_old` can return
+a bare string instead of a `{"claim": ..., "source_sentence": ...}` object, which crashed the
+comparison script's naive `.get()` call. Fixed defensively in both `test_extraction_v2.py` (report
+malformed items instead of crashing) and, more importantly, in the real pipeline's
+`extract_claims()` in `process_each_claim.py` (silently drop non-dict items) — a latent bug that
+existed in production code before this, just hadn't been triggered yet.
+**Status:** Inconclusive on net effect — confirmed the mechanical filter provides a real safety
+net regardless of *why* a bad claim was produced, but not yet confirmed that the new prompt
+improves genuine claim *quality/recall* on this specific chunk type. Needs the first test case's
+results (the `huang_cannot_self_correct` title/heading chunk) and ideally a broader sample before
+deciding whether to run a full corpus re-extraction.
+**Why it matters:** A direct instance of Chapter 13's own lesson (few-shot examples improve
+targeted accuracy, but a longer, more complex prompt can measurably cost a small model's
+reliability elsewhere) showing up as a real result during this project's own extraction work, not
+just a documented, generic risk.
+
+---
+
 ## Cross-cutting themes (good for a "what did you learn" interview answer)
 
 - **LLM output needs defense in depth**: valid syntax ≠ right keys ≠ right types ≠ right

@@ -12,3 +12,7 @@ data/papers/*
 # Editor/OS junk
 .DS_Store
 .vscode/
+
+# Personal study material — not part of the public project, keep local only
+STUDY_GUIDE.md
+study_guide/

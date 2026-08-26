@@ -19,7 +19,7 @@ Corpus: 18 arXiv papers on LLM self-correction (see `data/corpus_candidates.md`)
 - [x] Phase 4 — Agentic layer (ReAct from scratch, then LangGraph)
 - [x] Phase 5 — Guardrails (every claim traces to a quoted source sentence)
 - [x] Phase 6 — Evaluation suite (hand-labeled ground truth, precision/recall, RAGAS-style)
-- [ ] Phase 7 — Token/cost optimization
+- [x] Phase 7 — Token/cost optimization
 - [ ] Phase 8 — Polish & GitHub
 
 ## Known limitations (to formally measure in Phase 6)
@@ -80,6 +80,37 @@ read-only against saved data, never applied to a live re-run), so the original P
 (482 agrees, 38 contradicts) still stand. Fixing this properly would mean improving Phase 2
 extraction quality first — logged as future work rather than continuing to chase judge-prompt
 tuning with diminishing returns.
+
+## Token/cost optimization (Phase 7)
+
+The LangGraph agent (Phase 4) re-sends its entire accumulated history string as part of the
+prompt on every step, so cost compounds within a single run rather than staying flat — a classic
+agentic-cost pattern. Instrumented `agent_node`/`force_finish_node` to read real token counts
+directly from Ollama's `/api/chat` response (`prompt_eval_count`, `eval_count` — no estimation
+needed) and sum them across a full run.
+
+**Baseline:** one query, 2,137 prompt tokens + 463 completion tokens = 2,600 total.
+
+**Fix 1 — `windowed_history()`:** caps what actually goes into each `agent_node` prompt to the
+last 12 lines of history (full history is still kept intact for the final printed transcript and
+the repetition guard — only what gets *re-sent to the model* is capped). `force_finish_node`
+intentionally still receives the full history, since it only runs once per query.
+
+**Measurement pitfall caught along the way:** a re-run after fix 1 showed a *higher* total
+(4,744 tokens) — not a regression, but a reminder that the agent's step count isn't deterministic,
+so a single before/after total isn't a valid comparison across two runs of a non-deterministic
+system (run length itself varies). Averaging several runs or comparing tokens-per-step would be
+the rigorous fix; noted as a limitation of this measurement rather than over-claiming from one
+sample.
+
+**Fix 2 — capped `find_relationships`' result size:** the same 4,744-token run revealed an
+unbounded tool output — one `find_relationships` call returned **11** agreement matches in a
+single observation (`search_claims` already capped itself at `top_k=5`, but `find_relationships`
+had no equivalent cap). Added `top_k=5` to `find_relationships`, slicing both its agreements and
+contradictions lists. Confirmed directly (not just via a noisy aggregate total): the same tool
+call that previously returned 11 items now returns exactly 5 — a clean, run-length-independent
+before/after comparison for this specific fix, and the mechanism a much stronger claim of
+improvement than the total-token comparison in fix 1 could support alone.
 
 ## Guardrails (Phase 5)
 
