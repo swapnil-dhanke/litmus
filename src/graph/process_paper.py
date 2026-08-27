@@ -45,14 +45,14 @@ def save_claim(paper_id, paper_name, claim_text, source_sentence):
 
 def extract_claims(chunk):
     prompt = f"""Extract factual claims about LLM self-correction from this text.
-Do not include section headings, titles, author names, or citation markers as claims — only include substantive factual assertions.
-For each claim, include the exact sentence from the text it's based on.
+    Do not include section headings, titles, author names, or citation markers as claims — only include substantive factual assertions.
+    For each claim, include the exact sentence from the text it's based on.
 
-Respond with JSON in this exact shape:
-{{"claims": [{{"claim": "...", "source_sentence": "..."}}]}}
+    Respond with JSON in this exact shape:
+    {{"claims": [{{"claim": "...", "source_sentence": "..."}}]}}
 
-Text:
-{chunk}"""
+    Text:
+    {chunk}"""
 
     url = "http://localhost:11434/api/chat"
     payload = {
@@ -60,7 +60,7 @@ Text:
         "messages": [{"role": "user", "content": prompt}],
         "format": "json",
         "stream": False,
-        "options": {"num_predict": 500},
+        "options": {"num_predict": 500}, #measured in tks
     }
     try:
         response = requests.post(url, json=payload, timeout=60)

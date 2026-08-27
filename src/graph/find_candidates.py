@@ -22,7 +22,7 @@ similarity_matrix = embeddings @ embeddings.T # @ is multiply and .T is transpos
 
 print(similarity_matrix.shape)
 
-# threshold = 0.75 #similaritu test 1 -> found 9000+ pairs no use
+# threshold = 0.75 #similarity test 1 -> found 9000+ pairs no use
 threshold = 0.85 
 
 candidates = []
