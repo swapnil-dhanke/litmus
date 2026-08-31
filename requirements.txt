@@ -1,2 +1,3 @@
 # We'll add packages here as we actually start using them (e.g. langchain,
 # langgraph, neo4j, ollama-python) instead of installing everything upfront.
+#dependencies cant be decided yet
