@@ -1,27 +1,33 @@
-from papers import papers
+import json
+from pathlib import Path
+
+from chunker import group_into_chunks, split_into_sentences
 from clean_text import clean_text
 from extract import extract_text
-import chunker
-import json
+from papers import papers
 
-for paper in papers:
 
-    save_path = f"data/papers/{paper['name']}.pdf"
+def main():
+    """Extract and chunk each paper once, writing one JSON file per paper."""
+    paper_dir = Path("data/papers")
+    output_dir = Path("data/processed")
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    text = extract_text(save_path)
-    text = clean_text(text)
-    sentences = chunker.split_into_sentences(text)
-    chunks = chunker.group_into_chunks(sentences, max_words=250, separator=" ")
+    for paper in papers:
+        text = clean_text(extract_text(paper_dir / f"{paper['name']}.pdf"))
+        chunks = group_into_chunks(split_into_sentences(text), separator=" ")
+        result = {
+            "paper_id": paper["id"],
+            "paper_name": paper["name"],
+            "chunks": chunks,
+        }
 
-    result = {
-        "paper_id": paper["id"],
-        "paper_name": paper["name"],
-        "chunks": chunks,
-    }
+        output_path = output_dir / f"{paper['name']}.json"
+        with output_path.open("w", encoding="utf-8") as file:
+            json.dump(result, file, ensure_ascii=False)
 
-    output_path = f"data/processed/{paper['name']}.json"
+        print(f"{paper['name']}: {len(chunks)} chunks")
 
-    with open(output_path, "w") as f:
-        json.dump(result, f, indent=2)
 
-    print(f"{paper['name']}: {len(chunks)} chunks")
+if __name__ == "__main__":
+    main()

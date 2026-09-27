@@ -1,30 +1,24 @@
 import re
 
-from clean_text import clean_text
-from extract import extract_text
+
+_WHITESPACE = re.compile(r"\s+")
+_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?]) +")
 
 
-# text = """hello, my name is swapnil dhanke, my age is 26 this is a test pearagraph for chunking.
+def group_into_chunks(paragraphs, max_words=250, separator="\n\n"):
+    """Combine consecutive text units without exceeding ``max_words`` when possible."""
+    if max_words <= 0:
+        raise ValueError("max_words must be positive")
 
-#         I dont know what I am writing but I am having fun like this not sure what to write hehe
-#         we are currently studying chunking feels slow but all part of the process i guess.
-
-#         okay we have opted for self correction with LLMs, we are building litmus which is a tool that
-#         finds contradictions between research papers and documents"""
-
-# paragraphs = text.split("\n\n")
-
-# print (len(paragraphs))
-# print (paragraphs)
-
-def group_into_chunks(paragraphs, max_words , separator = "\n\n"):
     chunks = []
     current_chunk = []
     current_word_count = 0
 
     for paragraph in paragraphs:
-        word_count = len(paragraph.split())
+        if not paragraph or not paragraph.strip():
+            continue
 
+        word_count = len(paragraph.split())
         if current_word_count + word_count > max_words and current_chunk:
             chunks.append(separator.join(current_chunk))
             current_chunk = []
@@ -38,25 +32,24 @@ def group_into_chunks(paragraphs, max_words , separator = "\n\n"):
 
     return chunks
 
+
 def split_into_sentences(text):
-    text = re.sub(r"\s+", " ", text)
-    sentences = re.split(r"(?<=[.!?]) +", text)
-    return sentences
+    """Normalize whitespace and split at basic sentence-ending punctuation."""
+    normalized_text = _WHITESPACE.sub(" ", text).strip()
+    return _SENTENCE_BOUNDARY.split(normalized_text) if normalized_text else []
 
-text = extract_text("data/papers/huang_2310.01798.pdf")
-cleaned = clean_text(text)
-sentences = split_into_sentences(cleaned)
-chunks = group_into_chunks(sentences, max_words=250, separator=" ")
 
+def main():
+    """Run the one-paper chunking example without affecting library imports."""
+    from clean_text import clean_text
+    from extract import extract_text
+
+    text = extract_text("data/papers/huang_2310.01798.pdf")
+    chunks = group_into_chunks(split_into_sentences(clean_text(text)), separator=" ")
+    print(len(chunks))
+    if chunks:
+        print(chunks[0])
 
 
 if __name__ == "__main__":
-    print(len(chunks))
-    print(chunks[0]) 
-
-# print(len(sentences))
-# print(sentences[:3])
-
-# result = group_into_chunks(paragraphs, 100)
-# print(len(result))
-# print(result)
+    main()

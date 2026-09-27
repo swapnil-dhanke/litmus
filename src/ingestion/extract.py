@@ -1,19 +1,18 @@
 from pypdf import PdfReader
-from clean_text import clean_text
+
 
 def extract_text(pdf_path):
+    """Extract a PDF's text without doing any work when this module is imported."""
     reader = PdfReader(pdf_path)
-    pages = [page.extract_text() for page in reader.pages]
-    return "\n\n".join(pages)
-reader = PdfReader("data/papers/huang_2310.01798.pdf")
+    return "\n\n".join(page.extract_text() or "" for page in reader.pages)
 
 
 if __name__ == "__main__":
+    from clean_text import clean_text
+
+    reader = PdfReader("data/papers/huang_2310.01798.pdf")
     print(len(reader.pages))
-
-
     text = extract_text("data/papers/huang_2310.01798.pdf")
     cleaned = clean_text(text)
-    paragraphs = cleaned.split("\n\n")
-    print(len(paragraphs))
+    print(len(cleaned.split("\n\n")))
     print(cleaned[:1000])
